@@ -9,10 +9,16 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/AlameerAshraf/RepoBridge/actions/workflows/ci.yml"><img src="https://github.com/AlameerAshraf/RepoBridge/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License: MIT"></a>
+  <a href="https://github.com/AlameerAshraf/RepoBridge/stargazers"><img src="https://img.shields.io/github/stars/AlameerAshraf/RepoBridge?style=flat-square&logo=github" alt="GitHub stars"></a>
+  <a href="https://github.com/AlameerAshraf/RepoBridge/network/members"><img src="https://img.shields.io/github/forks/AlameerAshraf/RepoBridge?style=flat-square&logo=github" alt="GitHub forks"></a>
+  <a href="https://github.com/AlameerAshraf/RepoBridge/issues"><img src="https://img.shields.io/github/issues/AlameerAshraf/RepoBridge?style=flat-square" alt="Issues"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square" alt="Node">
   <img src="https://img.shields.io/badge/typescript-5.x-blue?style=flat-square" alt="TypeScript">
-  <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="License">
   <img src="https://img.shields.io/badge/AI-multi--provider-purple?style=flat-square" alt="Multi-Provider AI">
+  <a href="http://makeapullrequest.com"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs Welcome"></a>
+  <a href="https://opensource.org/"><img src="https://badges.frapsoft.com/os/v3/open-source.svg?v=103" alt="Open Source"></a>
 </p>
 
 ---
@@ -47,7 +53,7 @@ You'd normally spend hours reading code across repos, mentally mapping dependenc
 
 ```bash
 # Install
-git clone https://github.com/your-org/repobridge.git
+git clone https://github.com/AlameerAshraf/RepoBridge.git
 cd repobridge
 npm install && npm run build && npm link
 
@@ -339,6 +345,33 @@ Ollama requires no API key. Keys can also be set via `config --api-key`.
 - Node.js >= 18
 - npm
 - `grep` (pre-installed on macOS/Linux) — used for event/auth scanning during indexing
+
+---
+
+## Tests
+
+Unit tests use [Vitest](https://vitest.dev/). Run:
+
+```bash
+npm install
+npm test
+```
+
+Example output (abridged):
+
+```text
+ RUN  v3.2.4
+
+ ✓ src/lib/providers/base.test.ts (2 tests) 1ms
+ ✓ src/ui/markdown.test.ts (4 tests) 2ms
+ ✓ src/lib/storage.test.ts (5 tests) 48ms
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+   Duration  ~250ms
+```
+
+CI runs `npm ci`, `npm run build`, and `npm test` on every push and pull request to `main` (see workflow badge above).
 
 ---
 
