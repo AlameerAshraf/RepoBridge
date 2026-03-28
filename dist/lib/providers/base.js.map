@@ -1,0 +1,1 @@
+{"version":3,"file":"base.js","sourceRoot":"","sources":["../../../src/lib/providers/base.ts"],"names":[],"mappings":"AASA,MAAM,CAAC,MAAM,cAAc,GAAiC;IAC1D,SAAS,EAAE,0BAA0B;IACrC,MAAM,EAAE,QAAQ;IAChB,MAAM,EAAE,kBAAkB;IAC1B,MAAM,EAAE,UAAU;CACnB,CAAC;AAEF,MAAM,CAAC,MAAM,iBAAiB,GAAwC;IACpE,SAAS,EAAE,mBAAmB;IAC9B,MAAM,EAAE,gBAAgB;IACxB,MAAM,EAAE,gBAAgB;IACxB,MAAM,EAAE,IAAI;CACb,CAAC"}

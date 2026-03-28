@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node:*)",
+      "Bash(rm -f ~/.repobridge/config.json)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(npm link:*)",
+      "Bash(printf '/Users/Shared/Projects/RepoBridge\\\\n/Users/Shared/Projects/RepoBridge\\\\n2\\\\n')",
+      "Bash(printf '/Users/Shared/Projects/RepoBridge\\\\n2\\\\n')"
+    ]
+  }
+}
