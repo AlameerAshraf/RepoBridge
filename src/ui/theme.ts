@@ -1,5 +1,39 @@
 import chalk from "chalk";
 import boxen from "boxen";
+import stripAnsi from "strip-ansi";
+
+// ─── Layout constants ───
+
+export const INDENT = "  ";
+export const DIVIDER = chalk.dim("─".repeat(60));
+export const DOUBLE_DIVIDER = chalk.dim("═".repeat(60));
+
+export const ICON = {
+  hint: "→",
+  success: "✓",
+  error: "✗",
+  warning: "⚠",
+  create: "+",
+  modify: "~",
+  delete: "-",
+  bullet: "•",
+} as const;
+
+// ─── Layout helpers ───
+
+export function section(title: string): string {
+  return `\n${INDENT}${chalk.bold.cyan(title)}\n${INDENT}${DIVIDER}`;
+}
+
+export function subsection(title: string): string {
+  return `\n${INDENT}${chalk.bold(title)}`;
+}
+
+export function keyValue(key: string, value: string): string {
+  return `${INDENT}${chalk.dim(key + ":")} ${value}`;
+}
+
+// ─── Repo colors ───
 
 const REPO_COLORS = [
   chalk.cyan,
@@ -22,6 +56,8 @@ export function getRepoColor(repoName: string): typeof chalk {
   return colorMap.get(repoName)!;
 }
 
+// ─── Header ───
+
 export function header(): string {
   const art = chalk.bold.cyan(`
   ╦═╗┌─┐┌─┐┌─┐╔╗ ┬─┐┬┌┬┐┌─┐┌─┐
@@ -30,6 +66,8 @@ export function header(): string {
   `) + chalk.dim("  Cross-repo intelligence CLI\n");
   return art;
 }
+
+// ─── Boxes ───
 
 export function successBox(message: string, title?: string): string {
   return boxen(chalk.green(message), {
@@ -64,8 +102,10 @@ export function infoBox(message: string, title?: string): string {
   });
 }
 
+// ─── Inline helpers ───
+
 export function hint(text: string): string {
-  return chalk.dim(`\n💡 ${text}\n`);
+  return chalk.dim(`\n${ICON.hint} ${text}\n`);
 }
 
 export function repoLabel(name: string): string {
@@ -82,16 +122,36 @@ export function conflictSeverityColor(severity: string): string {
   }
 }
 
-export function table(headers: string[], rows: string[][]): string {
-  const stripAnsi = (str: string) => str.replace(/\u001b\[[0-9;]*m/g, "");
+// ─── Table ───
+
+export interface TableOptions {
+  maxWidth?: number;
+  rowSeparators?: boolean;
+}
+
+export function table(headers: string[], rows: string[][], options: TableOptions = {}): string {
+  const maxWidth = options.maxWidth || 120;
 
   const colWidths = headers.map((h, i) => {
     const maxRow = rows.reduce((max, row) => Math.max(max, stripAnsi(row[i] || "").length), 0);
     return Math.max(stripAnsi(h).length, maxRow) + 2;
   });
 
+  // Shrink columns proportionally if total exceeds maxWidth
+  const totalWidth = colWidths.reduce((s, w) => s + w, 0) + (colWidths.length - 1) * 3;
+  if (totalWidth > maxWidth) {
+    const scale = maxWidth / totalWidth;
+    for (let i = 0; i < colWidths.length; i++) {
+      colWidths[i] = Math.max(4, Math.floor(colWidths[i]! * scale));
+    }
+  }
+
   const pad = (str: string, width: number) => {
     const visible = stripAnsi(str).length;
+    if (visible > width) {
+      // Truncate — find the right position accounting for ANSI codes
+      return truncateStr(str, width);
+    }
     return str + " ".repeat(Math.max(0, width - visible));
   };
 
@@ -102,10 +162,28 @@ export function table(headers: string[], rows: string[][]): string {
     row.map((cell, i) => pad(cell, colWidths[i]!)).join(` ${sep} `)
   );
 
-  return [headerLine, divider, ...rowLines].join("\n");
+  const lines = [headerLine, divider];
+  if (options.rowSeparators) {
+    for (let i = 0; i < rowLines.length; i++) {
+      lines.push(rowLines[i]!);
+      if (i < rowLines.length - 1) lines.push(divider);
+    }
+  } else {
+    lines.push(...rowLines);
+  }
+
+  return lines.join("\n");
 }
 
+// ─── Utilities ───
+
 export function truncateStr(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 1) + "…";
+  if (stripAnsi(str).length <= maxLen) return str;
+  // For plain strings, simple slice
+  if (str === stripAnsi(str)) {
+    return str.slice(0, maxLen - 1) + "…";
+  }
+  // For ANSI strings, strip and truncate
+  const plain = stripAnsi(str);
+  return plain.slice(0, maxLen - 1) + "…";
 }

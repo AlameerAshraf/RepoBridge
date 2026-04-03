@@ -1,4 +1,4 @@
-import type { RepoIndex, PlanRepo } from "./storage.js";
+import type { RepoIndex, PlanRepo, DiscussConflict } from "./storage.js";
 import { getGlobalConfig } from "./storage.js";
 import {
   createProvider,
@@ -87,7 +87,7 @@ export async function* askStream(
   const stream = provider.chatStream([
     {
       role: "system",
-      content: `You are RepoBridge, a cross-repo intelligence assistant. You have deep knowledge of the following repositories:\n\n${repoContext}\n\nWhen answering questions:\n- Always cite which repo and file your information comes from using [repo-name:file-path] format\n- If the question spans multiple repos, explain how they relate\n- Be specific about code, APIs, and data flows\n- If you're uncertain about something, say so`,
+      content: `You are RepoBridge, a cross-repo intelligence assistant. You have knowledge of these repositories:\n\n${repoContext}\n\nRules:\n- Be concise and direct. Answer the question, not everything you know about the topic.\n- Lead with the core answer in 1-3 sentences, then add brief supporting details only if needed.\n- Cite sources using [repo-name:file-path] format, but only for key references — don't cite every file.\n- Skip boilerplate, summaries, ASCII diagrams, and "Communication Flow Example" sections.\n- If uncertain, say so briefly.\n- Match your response length to the question's complexity: simple question = short answer.`,
     },
     { role: "user", content: question },
   ]);
@@ -122,63 +122,188 @@ export async function generatePlan(
   return JSON.parse(jsonMatch[0]);
 }
 
-export async function debateRound(
-  repoName: string,
+export async function analyzeRepo(
   repoIndex: RepoIndex,
   feature: string,
-  previousMessages: Array<{
-    repo: string;
-    statement: string;
-    conflicts: Array<{ type: string; my_ref: string; their_ref: string; description: string }>;
-  }>,
-  roundNumber: number
-): Promise<{
-  statement: string;
-  conflicts: Array<{ type: string; my_ref: string; their_ref: string; description: string }>;
-}> {
+  allIndexes: RepoIndex[]
+): Promise<string> {
   const provider = await getProvider();
   const repoContext = buildRepoContext([repoIndex]);
-
-  let conversationHistory = "";
-  const alreadyFoundConflicts: string[] = [];
-  if (previousMessages.length > 0) {
-    conversationHistory = "\n\nPrevious messages:\n" +
-      previousMessages.map((m) => {
-        const conflictSummary = m.conflicts.length > 0
-          ? ` [conflicts: ${m.conflicts.map((c) => c.type).join(", ")}]`
-          : "";
-        return `[${m.repo}]: ${m.statement}${conflictSummary}`;
-      }).join("\n");
-
-    for (const m of previousMessages) {
-      for (const c of m.conflicts) {
-        alreadyFoundConflicts.push(`${c.type}: ${c.description}`);
-      }
-    }
-  }
-
-  const alreadyFoundNote = alreadyFoundConflicts.length > 0
-    ? `\n\nConflicts ALREADY found (DO NOT repeat these):\n${alreadyFoundConflicts.map((c) => `- ${c}`).join("\n")}`
-    : "";
+  const otherRepos = allIndexes
+    .filter((i) => i.repo !== repoIndex.repo)
+    .map((i) => i.repo)
+    .join(", ");
 
   const text = await provider.chat([
     {
       role: "system",
-      content: `You are "${repoName}" in a technical debate about a cross-repo feature. Your codebase:\n\n${repoContext}\n\nRules:\n- Statement: 2-3 sentences about YOUR implementation approach. Be specific about files, endpoints, schemas.\n- Only report NEW conflicts not already found.\n- Each conflict description must clearly state: what YOU expect vs what THEY expect. Example: "Backend returns { user_id, created_at } but frontend expects { userId, createdAt } — needs field mapping or shared DTO"\n- my_ref: your specific file path, endpoint, field, or event name\n- their_ref: the other repo's specific file path, endpoint, field, or event name\n- If nothing new to add, return empty conflicts array.\n\nConflict types: endpoint_mismatch, field_naming, auth_contract, event_mismatch, response_shape, version_conflict, schema_mismatch`,
+      content: `You are a senior software architect analyzing how a repository handles a specific concern.
+
+Repository context:
+${repoContext}
+
+Other repositories in this project: ${otherRepos}
+
+Analyze this repository's relevant code patterns for the feature described below. Focus on:
+- Existing API contracts (endpoints, request/response shapes, field names, HTTP methods)
+- Data models and schemas (database tables, TypeScript interfaces, validation rules)
+- Authentication and authorization patterns (middleware, guards, token handling)
+- Event/message patterns (emitted events, consumed events, queue names)
+- Shared types or contracts (exported interfaces, DTOs, API client code)
+- Naming conventions (camelCase vs snake_case, plural vs singular, prefixes)
+- Error handling patterns (error codes, response formats, status codes)
+
+Be specific: cite exact file paths, function names, field names, endpoint paths. Do not speculate — only describe what the code actually does.`,
     },
     {
       role: "user",
-      content: `Feature: "${feature}"\nRound ${roundNumber}.${conversationHistory}${alreadyFoundNote}\n\nReturn ONLY JSON:\n{"statement": "2-3 sentences, specific", "conflicts": [{"type": "type", "my_ref": "exact ref", "their_ref": "exact ref", "description": "What I expect vs what they expect — max 25 words"}]}`,
-    },
-  ], 1536);
+      content: `Analyze this repository's code patterns relevant to implementing: "${feature}"
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return { statement: text, conflicts: [] };
+Provide a thorough analysis covering all the areas above that are relevant. For each area, cite specific files and code patterns.`,
+    },
+  ], 4096);
+
+  return text;
+}
+
+export async function crossReference(
+  feature: string,
+  repoAnalyses: Array<{ repo: string; analysis: string }>,
+  allIndexes: RepoIndex[]
+): Promise<DiscussConflict[]> {
+  const provider = await getProvider();
+  const repoContext = buildRepoContext(allIndexes);
+
+  const analysesText = repoAnalyses
+    .map((a) => `## ${a.repo}\n${a.analysis}`)
+    .join("\n\n---\n\n");
+
+  const text = await provider.chat([
+    {
+      role: "system",
+      content: `You are a senior software architect reviewing multiple repository analyses to identify cross-repo conflicts and integration risks.
+
+Here are the per-repo analyses:
+
+${analysesText}
+
+Full repository context:
+${repoContext}
+
+Identify concrete conflicts between these repositories for the described feature. For each conflict:
+1. Describe what each repo expects or does differently, citing specific file paths and code references from each
+2. Assess severity based on actual impact:
+   - "high": Would cause runtime errors, data corruption, or security vulnerabilities if not resolved
+   - "medium": Would cause degraded behavior, inconsistent UX, or require workarounds
+   - "low": Style/convention differences that should be aligned but won't break functionality
+3. Explain WHY you assigned that severity level
+4. Suggest a specific resolution approach
+
+Rules:
+- Only report conflicts where you can cite specific references in BOTH repos
+- Do NOT invent hypothetical conflicts — every conflict must be grounded in code evidence
+- If two potential conflicts describe the same underlying issue, merge them into one
+- Be thorough but precise — quality over quantity`,
+    },
+    {
+      role: "user",
+      content: `Feature: "${feature}"
+
+Return ONLY valid JSON — an array of conflict objects:
+[
+  {
+    "type": "conflict_type (e.g. endpoint_mismatch, schema_mismatch, field_naming, auth_contract, event_mismatch, response_shape, version_conflict)",
+    "repoA": "first repo name",
+    "repoARef": "specific file, endpoint, or field in first repo",
+    "repoB": "second repo name",
+    "repoBRef": "specific file, endpoint, or field in second repo",
+    "description": "Detailed description of what each repo expects vs what the other does",
+    "severity": "high|medium|low",
+    "severityReason": "Why this severity level — what would happen if unresolved",
+    "resolution": "Specific suggested fix (which repo should change, what the change looks like)"
   }
+]
+
+If no conflicts are found, return an empty array: []`,
+    },
+  ], 8192);
+
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
   try {
-    return JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(jsonMatch[0]) as DiscussConflict[];
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return { statement: text, conflicts: [] };
+    return [];
+  }
+}
+
+export async function deepDive(
+  feature: string,
+  conflicts: DiscussConflict[],
+  repoAnalyses: Array<{ repo: string; analysis: string }>,
+  allIndexes: RepoIndex[]
+): Promise<DiscussConflict[]> {
+  const provider = await getProvider();
+  const repoContext = buildRepoContext(allIndexes);
+
+  const analysesText = repoAnalyses
+    .map((a) => `## ${a.repo}\n${a.analysis}`)
+    .join("\n\n---\n\n");
+
+  const conflictsText = conflicts
+    .map((c, i) => `${i + 1}. [${c.severity}] ${c.type}: ${c.description} (${c.repoA}:${c.repoARef} ↔ ${c.repoB}:${c.repoBRef})`)
+    .join("\n");
+
+  const text = await provider.chat([
+    {
+      role: "system",
+      content: `You are a senior software architect performing a validation pass on cross-repo conflict analysis.
+
+Per-repo analyses:
+${analysesText}
+
+Full repository context:
+${repoContext}
+
+Previously identified conflicts:
+${conflictsText}
+
+Your tasks:
+1. Validate each conflict — is it real and accurately described? Remove any false positives.
+2. Check if severity ratings are appropriate — upgrade or downgrade with reasoning.
+3. Look for any MISSED conflicts not caught in the first pass.
+4. Ensure resolution suggestions are actionable and specific.
+
+Return the complete validated conflict list (existing + any new ones found).`,
+    },
+    {
+      role: "user",
+      content: `Feature: "${feature}"
+
+Return ONLY valid JSON — the validated array of conflict objects with the same schema:
+[
+  {
+    "type": "string",
+    "repoA": "string",
+    "repoARef": "string",
+    "repoB": "string",
+    "repoBRef": "string",
+    "description": "string",
+    "severity": "high|medium|low",
+    "severityReason": "string",
+    "resolution": "string"
+  }
+]`,
+    },
+  ], 8192);
+
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return conflicts;
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as DiscussConflict[];
+    return Array.isArray(parsed) ? parsed : conflicts;
+  } catch {
+    return conflicts;
   }
 }

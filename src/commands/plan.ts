@@ -8,11 +8,11 @@ import {
   savePlan,
   projectPath,
   type Plan,
-  type DebateConflict,
+  type DiscussConflict,
 } from "../lib/storage.js";
 import { generatePlan } from "../lib/ai.js";
-import { header, successBox, hint, repoLabel, infoBox, table, truncateStr } from "../ui/theme.js";
-import { debateCommand } from "./debate.js";
+import { header, successBox, hint, repoLabel, infoBox, ICON, INDENT, DIVIDER } from "../ui/theme.js";
+import { discussCommand } from "./discuss.js";
 
 export async function planCommand(feature: string, options: { export?: string }): Promise<void> {
   console.log(header());
@@ -33,7 +33,7 @@ export async function planCommand(feature: string, options: { export?: string })
     spinner.succeed("Plan generated");
 
     const plan: Plan = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       project: projectName,
       feature,
       timestamp: new Date().toISOString(),
@@ -47,13 +47,13 @@ export async function planCommand(feature: string, options: { export?: string })
 
     for (const repo of result.repos) {
       console.log(`  ${repoLabel(repo.name)}`);
-      console.log(chalk.dim("  " + "─".repeat(58)));
+      console.log(`${INDENT}${DIVIDER}`);
 
       for (let i = 0; i < repo.tasks.length; i++) {
         const t = repo.tasks[i]!;
-        const icon = t.action === "create" ? chalk.green("CREATE")
-          : t.action === "modify" ? chalk.yellow("MODIFY")
-          : chalk.red("DELETE");
+        const icon = t.action === "create" ? chalk.green(`${ICON.create} CREATE`)
+          : t.action === "modify" ? chalk.yellow(`${ICON.modify} MODIFY`)
+          : chalk.red(`${ICON.delete} DELETE`);
 
         console.log(`\n  ${chalk.bold(`${i + 1}.`)} ${icon} ${chalk.bold(t.file)}`);
         console.log(`     ${chalk.white(t.description)}`);
@@ -94,7 +94,7 @@ export async function planCommand(feature: string, options: { export?: string })
     await fs.writeFile(readmePath, md);
     console.log(chalk.green(`\n  Plan saved: ${readmePath}`));
 
-    console.log(hint('Run debate to find conflicts: `debate` | Open plan: `cat ' + readmePath + '`'));
+    console.log(hint('Run discuss to find conflicts: `discuss` | Open plan: `cat ' + readmePath + '`'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`\nError: ${msg}`));
@@ -175,10 +175,10 @@ function generateReadme(plan: Plan, projectName: string): string {
     md += `\n---\n\n`;
   }
 
-  // Blockers from debate
+  // Blockers from discussion
   if (plan.blockers && plan.blockers.length > 0) {
     md += `## Blockers\n\n`;
-    md += `> Conflicts identified during cross-repo debate. Resolve these before implementation.\n\n`;
+    md += `> Conflicts identified during cross-repo discussion. Resolve these before implementation.\n\n`;
 
     const highBlockers = plan.blockers.filter((b) => b.severity === "high");
     const medBlockers = plan.blockers.filter((b) => b.severity === "medium");
@@ -186,34 +186,37 @@ function generateReadme(plan: Plan, projectName: string): string {
 
     let num = 1;
     if (highBlockers.length > 0) {
-      md += `### 🔴 High Severity\n\n`;
+      md += `### High Severity\n\n`;
       for (const b of highBlockers) {
         md += `**${num}. ${b.type}**\n`;
         md += `- ${b.description}\n`;
-        md += `- Source: \`${b.myRef}\`\n`;
-        md += `- Target: \`${b.theirRef}\`\n\n`;
+        md += `- **${b.repoA}:** \`${b.repoARef}\`\n`;
+        md += `- **${b.repoB}:** \`${b.repoBRef}\`\n`;
+        md += `- **Resolution:** ${b.resolution}\n\n`;
         num++;
       }
     }
 
     if (medBlockers.length > 0) {
-      md += `### 🟡 Medium Severity\n\n`;
+      md += `### Medium Severity\n\n`;
       for (const b of medBlockers) {
         md += `**${num}. ${b.type}**\n`;
         md += `- ${b.description}\n`;
-        md += `- Source: \`${b.myRef}\`\n`;
-        md += `- Target: \`${b.theirRef}\`\n\n`;
+        md += `- **${b.repoA}:** \`${b.repoARef}\`\n`;
+        md += `- **${b.repoB}:** \`${b.repoBRef}\`\n`;
+        md += `- **Resolution:** ${b.resolution}\n\n`;
         num++;
       }
     }
 
     if (lowBlockers.length > 0) {
-      md += `### ⚪ Low Severity\n\n`;
+      md += `### Low Severity\n\n`;
       for (const b of lowBlockers) {
         md += `**${num}. ${b.type}**\n`;
         md += `- ${b.description}\n`;
-        md += `- Source: \`${b.myRef}\`\n`;
-        md += `- Target: \`${b.theirRef}\`\n\n`;
+        md += `- **${b.repoA}:** \`${b.repoARef}\`\n`;
+        md += `- **${b.repoB}:** \`${b.repoBRef}\`\n`;
+        md += `- **Resolution:** ${b.resolution}\n\n`;
         num++;
       }
     }

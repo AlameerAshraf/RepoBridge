@@ -12,7 +12,7 @@ import {
   type RepoEntry,
 } from "../lib/storage.js";
 import { indexRepo } from "../lib/indexer.js";
-import { prompt } from "../lib/prompt.js";
+import { prompt, PromptEOFError } from "../lib/prompt.js";
 import { header, successBox, hint, repoLabel } from "../ui/theme.js";
 
 function isGitUrl(input: string): boolean {
@@ -114,24 +114,24 @@ export async function addCommand(firstRepoPath?: string): Promise<void> {
       }
     }
 
-    // Step 2: require at least 2 repos total
-    const totalAfterFirst = existingCount + addedCount;
+    // Step 2: require at least 2 repos total, then offer to add more
+    let repoNumber = existingCount + addedCount;
 
-    if (totalAfterFirst < 2) {
+    while (existingCount + addedCount < 2) {
       console.log(chalk.cyan("\n  RepoBridge needs at least 2 repos for cross-repo features."));
-      console.log(chalk.cyan("  Enter the path or GitHub URL for your second repo:\n"));
-      const input = await prompt(chalk.green("  repo 2 > "));
-      if (input.trim()) {
-        const ok = await addSingleRepo(projectName, input.trim());
-        if (ok) addedCount++;
+      console.log(chalk.cyan("  Enter the path or GitHub URL for your next repo (or \"quit\" to exit):\n"));
+      const input = await prompt(chalk.green(`  repo ${repoNumber + 1} > `));
+      if (!input.trim() || input.trim().toLowerCase() === "quit") {
+        console.log(chalk.yellow("\n  Exiting — you can run `repobridge add` later to add more repos."));
+        break;
       }
+      const ok = await addSingleRepo(projectName, input.trim());
+      if (ok) addedCount++;
+      repoNumber = existingCount + addedCount;
     }
 
     // Step 3: loop — add more or done
-    const totalNow = existingCount + addedCount;
-    let repoNumber = totalNow;
-
-    if (totalNow >= 2) {
+    if (existingCount + addedCount >= 2) {
       while (true) {
         console.log();
         const updatedConfig = await getProjectConfig(projectName);
@@ -168,6 +168,10 @@ export async function addCommand(firstRepoPath?: string): Promise<void> {
 
     console.log(hint('Next: `ask "your question"` | `plan "feature"` | `status`'));
   } catch (err) {
+    if (err instanceof PromptEOFError) {
+      console.log(chalk.yellow("\n  Input closed — you can run `add` later to add more repos."));
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`\nError: ${msg}`));
     process.exit(1);

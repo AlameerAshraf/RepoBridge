@@ -1,7 +1,7 @@
 import readline from "node:readline";
 import chalk from "chalk";
 import { getActiveProject } from "../lib/storage.js";
-import { setSharedReadline, clearSharedReadline } from "../lib/prompt.js";
+import { setSharedReadline, clearSharedReadline, PromptEOFError } from "../lib/prompt.js";
 import { header } from "../ui/theme.js";
 import { initCommand } from "./init.js";
 import { projectsCommand } from "./projects.js";
@@ -10,8 +10,8 @@ import { addCommand } from "./add.js";
 import { indexCommand } from "./index.js";
 import { askCommand } from "./ask.js";
 import { planCommand } from "./plan.js";
-import { debateCommand } from "./debate.js";
-import { sessionsCommand, sessionLoadCommand } from "./sessions.js";
+import { discussCommand } from "./discuss.js";
+import { sessionsCommand, sessionLoadCommand, sessionDeleteCommand } from "./sessions.js";
 import { statusCommand } from "./status.js";
 import { configCommand } from "./config.js";
 import { leaveCommand } from "./leave.js";
@@ -26,9 +26,10 @@ function printHelp() {
         ["index", "Re-index all repos"],
         ["ask <question>", "Ask a question about your repos"],
         ["plan <feature>", "Generate a cross-repo implementation plan"],
-        ["debate [feature]", "Run a debate between repos"],
+        ["discuss [feature]", "Run a cross-repo discussion to find conflicts"],
         ["sessions", "List saved Q&A sessions"],
         ["sessions load <id>", "Load a saved session"],
+        ["sessions delete <id>", "Delete a saved session"],
         ["status", "Show active project status"],
         ["config [options]", "Configure AI provider and model"],
         ["leave", "Deactivate current project"],
@@ -125,12 +126,16 @@ async function executeCommand(args) {
                 await planCommand(featureWords.join(" "), { export: exportFlag });
                 break;
             }
+            case "discuss":
             case "debate":
-                await debateCommand(args[1] ? args.slice(1).join(" ") : undefined);
+                await discussCommand(args[1] ? args.slice(1).join(" ") : undefined);
                 break;
             case "sessions":
                 if (args[1] === "load" && args[2]) {
                     await sessionLoadCommand(args[2]);
+                }
+                else if (args[1] === "delete" && args[2]) {
+                    await sessionDeleteCommand(args[2]);
                 }
                 else {
                     await sessionsCommand();
@@ -181,6 +186,11 @@ async function executeCommand(args) {
         }
     }
     catch (err) {
+        if (err instanceof PromptEOFError) {
+            // User pressed Ctrl+D during a sub-prompt within a command — swallow it
+            // and return to the REPL loop
+            return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error(chalk.red(`\n  Error: ${msg}\n`));
     }

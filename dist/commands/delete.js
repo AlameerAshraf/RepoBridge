@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { getProjectConfig, deleteProject, listProjects, getActiveProject } from "../lib/storage.js";
-import { prompt } from "../lib/prompt.js";
+import { prompt, PromptEOFError } from "../lib/prompt.js";
 import { header, successBox, hint, errorBox } from "../ui/theme.js";
 export async function deleteCommand(name) {
     console.log(header());
@@ -31,7 +31,7 @@ export async function deleteCommand(name) {
         const config = await getProjectConfig(name);
         console.log(chalk.red(`\n  This will permanently delete project "${chalk.bold(name)}":`));
         console.log(chalk.dim(`    Repos: ${config.repos.map((r) => r.name).join(", ") || "none"}`));
-        console.log(chalk.dim(`    All sessions, plans, debates, and indexes will be removed.\n`));
+        console.log(chalk.dim(`    All sessions, plans, discussions, and indexes will be removed.\n`));
         const answer = await prompt(chalk.red(`  Type "${name}" to confirm > `));
         if (answer.trim() !== name) {
             console.log(chalk.yellow("\n  Cancelled. Project was not deleted."));
@@ -42,6 +42,10 @@ export async function deleteCommand(name) {
         console.log(hint('Run `projects` to see remaining projects'));
     }
     catch (err) {
+        if (err instanceof PromptEOFError) {
+            console.log(chalk.yellow("\n  Cancelled."));
+            return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error(errorBox(msg));
     }

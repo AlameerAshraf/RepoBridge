@@ -24,6 +24,8 @@ export interface Session {
     answer: string;
     timestamp: string;
     repos: string[];
+    provider?: string;
+    model?: string;
 }
 export interface Plan {
     id: string;
@@ -32,7 +34,7 @@ export interface Plan {
     timestamp: string;
     repos: PlanRepo[];
     crossCuttingConcerns: string[];
-    blockers?: DebateConflict[];
+    blockers?: DiscussConflict[];
 }
 export interface PlanRepo {
     name: string;
@@ -45,29 +47,27 @@ export interface PlanTask {
     details?: string[];
     dependencies?: string[];
 }
-export interface DebateResult {
+export interface DiscussResult {
     id: string;
     project: string;
     feature: string;
     timestamp: string;
-    rounds: DebateRound[];
-    conflicts: DebateConflict[];
+    analyses: Array<{
+        repo: string;
+        analysis: string;
+    }>;
+    conflicts: DiscussConflict[];
 }
-export interface DebateRound {
-    roundNumber: number;
-    messages: DebateMessage[];
-}
-export interface DebateMessage {
-    repo: string;
-    statement: string;
-    conflicts: DebateConflict[];
-}
-export interface DebateConflict {
+export interface DiscussConflict {
     type: string;
-    myRef: string;
-    theirRef: string;
+    repoA: string;
+    repoARef: string;
+    repoB: string;
+    repoBRef: string;
     description: string;
-    severity?: "high" | "medium" | "low";
+    severity: "high" | "medium" | "low";
+    severityReason: string;
+    resolution: string;
 }
 export interface RepoIndex {
     repo: string;
@@ -114,8 +114,10 @@ export declare function getAllRepoIndexes(projectName: string): Promise<RepoInde
 export declare function saveSession(projectName: string, session: Session): Promise<void>;
 export declare function listSessions(projectName: string): Promise<Session[]>;
 export declare function getSession(projectName: string, id: string): Promise<Session | null>;
+export declare function deleteSession(projectName: string, id: string): Promise<boolean>;
 export declare function savePlan(projectName: string, plan: Plan): Promise<void>;
 export declare function listPlans(projectName: string): Promise<Plan[]>;
 export declare function getPlan(projectName: string, id: string): Promise<Plan | null>;
-export declare function saveDebate(projectName: string, debate: DebateResult): Promise<void>;
+export declare function saveDiscussion(projectName: string, discussion: DiscussResult): Promise<void>;
+export declare function listDiscussions(projectName: string): Promise<DiscussResult[]>;
 //# sourceMappingURL=storage.d.ts.map

@@ -7,8 +7,8 @@ import { addCommand } from "./commands/add.js";
 import { indexCommand } from "./commands/index.js";
 import { askCommand } from "./commands/ask.js";
 import { planCommand } from "./commands/plan.js";
-import { debateCommand } from "./commands/debate.js";
-import { sessionsCommand, sessionLoadCommand } from "./commands/sessions.js";
+import { discussCommand } from "./commands/discuss.js";
+import { sessionsCommand, sessionLoadCommand, sessionDeleteCommand } from "./commands/sessions.js";
 import { statusCommand } from "./commands/status.js";
 import { configCommand } from "./commands/config.js";
 import { leaveCommand } from "./commands/leave.js";
@@ -49,9 +49,13 @@ program
     .option("--export <format>", "Export format: markdown or github")
     .action(planCommand);
 program
-    .command("debate [feature]")
-    .description("Run a debate between repos to find conflicts")
-    .action((feature) => debateCommand(feature));
+    .command("discuss [feature]")
+    .description("Run a cross-repo discussion to find conflicts")
+    .action((feature) => discussCommand(feature));
+// Hidden alias for backwards compatibility
+program
+    .command("debate [feature]", { hidden: true })
+    .action((feature) => discussCommand(feature));
 const sessionsCmd = program
     .command("sessions")
     .description("List saved Q&A sessions")
@@ -60,6 +64,10 @@ sessionsCmd
     .command("load <id>")
     .description("Load a saved session")
     .action(sessionLoadCommand);
+sessionsCmd
+    .command("delete <id>")
+    .description("Delete a saved session")
+    .action(sessionDeleteCommand);
 program
     .command("status")
     .description("Show active project status")

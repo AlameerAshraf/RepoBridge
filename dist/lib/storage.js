@@ -59,7 +59,7 @@ export async function createProject(name) {
     await fs.ensureDir(path.join(dir, "index"));
     await fs.ensureDir(path.join(dir, "sessions"));
     await fs.ensureDir(path.join(dir, "plans"));
-    await fs.ensureDir(path.join(dir, "debates"));
+    await fs.ensureDir(path.join(dir, "discussions"));
     const config = {
         name,
         repos: [],
@@ -151,7 +151,12 @@ export async function listSessions(projectName) {
     const sessions = [];
     for (const file of files) {
         if (file.endsWith(".json")) {
-            sessions.push(await fs.readJson(path.join(sessionsDir, file)));
+            try {
+                sessions.push(await fs.readJson(path.join(sessionsDir, file)));
+            }
+            catch {
+                // Skip corrupted session files
+            }
         }
     }
     return sessions.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -161,6 +166,13 @@ export async function getSession(projectName, id) {
     if (!(await fs.pathExists(sessionPath)))
         return null;
     return fs.readJson(sessionPath);
+}
+export async function deleteSession(projectName, id) {
+    const sessionPath = path.join(projectPath(projectName), "sessions", `${id}.json`);
+    if (!(await fs.pathExists(sessionPath)))
+        return false;
+    await fs.remove(sessionPath);
+    return true;
 }
 // Plans
 export async function savePlan(projectName, plan) {
@@ -175,7 +187,12 @@ export async function listPlans(projectName) {
     const plans = [];
     for (const file of files) {
         if (file.endsWith(".json")) {
-            plans.push(await fs.readJson(path.join(plansDir, file)));
+            try {
+                plans.push(await fs.readJson(path.join(plansDir, file)));
+            }
+            catch {
+                // Skip corrupted plan files
+            }
         }
     }
     return plans.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -186,9 +203,37 @@ export async function getPlan(projectName, id) {
         return null;
     return fs.readJson(planPath);
 }
-// Debates
-export async function saveDebate(projectName, debate) {
-    const debatePath = path.join(projectPath(projectName), "debates", `${debate.id}.json`);
-    await fs.writeJson(debatePath, debate, { spaces: 2 });
+// Discussions
+async function migrateDebatesDir(projectName) {
+    const oldDir = path.join(projectPath(projectName), "debates");
+    const newDir = path.join(projectPath(projectName), "discussions");
+    if ((await fs.pathExists(oldDir)) && !(await fs.pathExists(newDir))) {
+        await fs.rename(oldDir, newDir);
+    }
+}
+export async function saveDiscussion(projectName, discussion) {
+    await migrateDebatesDir(projectName);
+    const dir = path.join(projectPath(projectName), "discussions");
+    await fs.ensureDir(dir);
+    await fs.writeJson(path.join(dir, `${discussion.id}.json`), discussion, { spaces: 2 });
+}
+export async function listDiscussions(projectName) {
+    await migrateDebatesDir(projectName);
+    const dir = path.join(projectPath(projectName), "discussions");
+    if (!(await fs.pathExists(dir)))
+        return [];
+    const files = await fs.readdir(dir);
+    const results = [];
+    for (const file of files) {
+        if (file.endsWith(".json")) {
+            try {
+                results.push(await fs.readJson(path.join(dir, file)));
+            }
+            catch {
+                // Skip corrupted files
+            }
+        }
+    }
+    return results.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 //# sourceMappingURL=storage.js.map

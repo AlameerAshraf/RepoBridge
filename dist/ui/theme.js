@@ -1,5 +1,31 @@
 import chalk from "chalk";
 import boxen from "boxen";
+import stripAnsi from "strip-ansi";
+// ─── Layout constants ───
+export const INDENT = "  ";
+export const DIVIDER = chalk.dim("─".repeat(60));
+export const DOUBLE_DIVIDER = chalk.dim("═".repeat(60));
+export const ICON = {
+    hint: "→",
+    success: "✓",
+    error: "✗",
+    warning: "⚠",
+    create: "+",
+    modify: "~",
+    delete: "-",
+    bullet: "•",
+};
+// ─── Layout helpers ───
+export function section(title) {
+    return `\n${INDENT}${chalk.bold.cyan(title)}\n${INDENT}${DIVIDER}`;
+}
+export function subsection(title) {
+    return `\n${INDENT}${chalk.bold(title)}`;
+}
+export function keyValue(key, value) {
+    return `${INDENT}${chalk.dim(key + ":")} ${value}`;
+}
+// ─── Repo colors ───
 const REPO_COLORS = [
     chalk.cyan,
     chalk.magenta,
@@ -18,6 +44,7 @@ export function getRepoColor(repoName) {
     }
     return colorMap.get(repoName);
 }
+// ─── Header ───
 export function header() {
     const art = chalk.bold.cyan(`
   ╦═╗┌─┐┌─┐┌─┐╔╗ ┬─┐┬┌┬┐┌─┐┌─┐
@@ -26,6 +53,7 @@ export function header() {
   `) + chalk.dim("  Cross-repo intelligence CLI\n");
     return art;
 }
+// ─── Boxes ───
 export function successBox(message, title) {
     return boxen(chalk.green(message), {
         padding: 1,
@@ -56,8 +84,9 @@ export function infoBox(message, title) {
         titleAlignment: "center",
     });
 }
+// ─── Inline helpers ───
 export function hint(text) {
-    return chalk.dim(`\n💡 ${text}\n`);
+    return chalk.dim(`\n${ICON.hint} ${text}\n`);
 }
 export function repoLabel(name) {
     const color = getRepoColor(name);
@@ -71,25 +100,55 @@ export function conflictSeverityColor(severity) {
         default: return chalk.dim(severity);
     }
 }
-export function table(headers, rows) {
-    const stripAnsi = (str) => str.replace(/\u001b\[[0-9;]*m/g, "");
+export function table(headers, rows, options = {}) {
+    const maxWidth = options.maxWidth || 120;
     const colWidths = headers.map((h, i) => {
         const maxRow = rows.reduce((max, row) => Math.max(max, stripAnsi(row[i] || "").length), 0);
         return Math.max(stripAnsi(h).length, maxRow) + 2;
     });
+    // Shrink columns proportionally if total exceeds maxWidth
+    const totalWidth = colWidths.reduce((s, w) => s + w, 0) + (colWidths.length - 1) * 3;
+    if (totalWidth > maxWidth) {
+        const scale = maxWidth / totalWidth;
+        for (let i = 0; i < colWidths.length; i++) {
+            colWidths[i] = Math.max(4, Math.floor(colWidths[i] * scale));
+        }
+    }
     const pad = (str, width) => {
         const visible = stripAnsi(str).length;
+        if (visible > width) {
+            // Truncate — find the right position accounting for ANSI codes
+            return truncateStr(str, width);
+        }
         return str + " ".repeat(Math.max(0, width - visible));
     };
     const sep = chalk.dim("│");
     const headerLine = headers.map((h, i) => chalk.bold(pad(h, colWidths[i]))).join(` ${sep} `);
     const divider = colWidths.map((w) => chalk.dim("─".repeat(w))).join(chalk.dim("─┼─"));
     const rowLines = rows.map((row) => row.map((cell, i) => pad(cell, colWidths[i])).join(` ${sep} `));
-    return [headerLine, divider, ...rowLines].join("\n");
+    const lines = [headerLine, divider];
+    if (options.rowSeparators) {
+        for (let i = 0; i < rowLines.length; i++) {
+            lines.push(rowLines[i]);
+            if (i < rowLines.length - 1)
+                lines.push(divider);
+        }
+    }
+    else {
+        lines.push(...rowLines);
+    }
+    return lines.join("\n");
 }
+// ─── Utilities ───
 export function truncateStr(str, maxLen) {
-    if (str.length <= maxLen)
+    if (stripAnsi(str).length <= maxLen)
         return str;
-    return str.slice(0, maxLen - 1) + "…";
+    // For plain strings, simple slice
+    if (str === stripAnsi(str)) {
+        return str.slice(0, maxLen - 1) + "…";
+    }
+    // For ANSI strings, strip and truncate
+    const plain = stripAnsi(str);
+    return plain.slice(0, maxLen - 1) + "…";
 }
 //# sourceMappingURL=theme.js.map

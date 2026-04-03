@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { requireActiveProject, getAllRepoIndexes, saveSession } from "../lib/storage.js";
+import { requireActiveProject, getAllRepoIndexes, getGlobalConfig, saveSession } from "../lib/storage.js";
 import { askStream } from "../lib/ai.js";
 import { formatMarkdown } from "../ui/markdown.js";
 import { header, hint, errorBox } from "../ui/theme.js";
@@ -29,16 +29,19 @@ export async function askCommand(question) {
         console.log(formatMarkdown(fullAnswer));
         console.log("\n" + chalk.dim("  " + "─".repeat(50)));
         // Save session
+        const globalConfig = await getGlobalConfig();
         const session = {
-            id: Date.now().toString(),
+            id: crypto.randomUUID(),
             project: projectName,
             question,
             answer: fullAnswer,
             timestamp: new Date().toISOString(),
             repos: indexes.map((i) => i.repo),
+            provider: globalConfig.provider || "anthropic",
+            model: globalConfig.model,
         };
         await saveSession(projectName, session);
-        console.log(chalk.dim(`  Session saved (${session.id})`));
+        console.log(chalk.dim(`  Session saved (${session.id.slice(0, 8)})`));
         console.log(hint('Continue: `ask "follow-up"` | History: `sessions`'));
     }
     catch (err) {

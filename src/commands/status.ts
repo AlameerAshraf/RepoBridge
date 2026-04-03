@@ -6,9 +6,10 @@ import {
   getRepoIndex,
   listPlans,
   listSessions,
+  listDiscussions,
 } from "../lib/storage.js";
 import { DEFAULT_MODELS, type ProviderName } from "../lib/providers/index.js";
-import { header, hint, repoLabel, infoBox } from "../ui/theme.js";
+import { header, hint, repoLabel, section, keyValue, INDENT, DIVIDER } from "../ui/theme.js";
 
 export async function statusCommand(): Promise<void> {
   console.log(header());
@@ -18,42 +19,63 @@ export async function statusCommand(): Promise<void> {
     const config = await getProjectConfig(projectName);
     const plans = await listPlans(projectName);
     const sessions = await listSessions(projectName);
+    const discussions = await listDiscussions(projectName);
 
-    console.log(chalk.bold.cyan(`  Project: ${chalk.white(projectName)}\n`));
+    console.log(chalk.bold.cyan(`${INDENT}Project: ${chalk.white(projectName)}\n`));
     const globalConfig = await getGlobalConfig();
     const provider = (globalConfig.provider || "anthropic") as ProviderName;
     const model = globalConfig.model || DEFAULT_MODELS[provider];
 
-    console.log(chalk.dim(`  Created: ${new Date(config.createdAt).toLocaleDateString()}`));
-    console.log(chalk.dim(`  Last used: ${new Date(config.lastUsed).toLocaleDateString()}`));
-    console.log(chalk.dim(`  AI: ${provider} / ${model}\n`));
+    console.log(keyValue("Created", new Date(config.createdAt).toLocaleDateString()));
+    console.log(keyValue("Last used", new Date(config.lastUsed).toLocaleDateString()));
+    console.log(keyValue("AI", `${provider} / ${model}`));
 
     // Repos & index status
-    console.log(chalk.bold("  Repositories:"));
+    console.log(section("Repositories"));
     if (config.repos.length === 0) {
-      console.log(chalk.yellow("    No repos added yet."));
+      console.log(chalk.yellow(`${INDENT}  No repos added yet.`));
     } else {
+      let totalFiles = 0;
+      let totalRoutes = 0;
       for (const repo of config.repos) {
         const index = await getRepoIndex(projectName, repo.name);
-        const indexStatus = index
-          ? chalk.green(`indexed ${new Date(index.indexedAt).toLocaleDateString()} (${index.fileTree.length} files)`)
-          : chalk.yellow("not indexed");
-        console.log(`    ${repoLabel(repo.name)} ${chalk.dim(repo.path)} — ${indexStatus}`);
+        if (index) {
+          totalFiles += index.fileTree.length;
+          totalRoutes += index.apiRoutes.length;
+          const indexInfo = chalk.green(`indexed ${new Date(index.indexedAt).toLocaleDateString()} (${index.fileTree.length} files, ${index.apiRoutes.length} routes)`);
+          console.log(`${INDENT}  ${repoLabel(repo.name)} ${chalk.dim(repo.path)}`);
+          console.log(`${INDENT}    ${indexInfo}`);
+        } else {
+          console.log(`${INDENT}  ${repoLabel(repo.name)} ${chalk.dim(repo.path)}`);
+          console.log(`${INDENT}    ${chalk.yellow("not indexed")}`);
+        }
+      }
+      if (totalFiles > 0) {
+        console.log(`\n${INDENT}${chalk.dim(`Total: ${totalFiles} files, ${totalRoutes} API routes across ${config.repos.length} repos`)}`);
       }
     }
 
-    console.log();
-    console.log(chalk.dim(`  Plans: ${plans.length} | Sessions: ${sessions.length}`));
+    // Activity summary
+    console.log(section("Activity"));
+    console.log(keyValue("Plans", String(plans.length)));
+    console.log(keyValue("Sessions", String(sessions.length)));
+    console.log(keyValue("Discussions", String(discussions.length)));
 
     if (plans.length > 0) {
       const latest = plans[0]!;
-      console.log(chalk.dim(`  Latest plan: "${latest.feature}" (${new Date(latest.timestamp).toLocaleDateString()})`));
+      console.log(`\n${INDENT}${chalk.dim("Latest plan:")} "${latest.feature}" ${chalk.dim(`(${new Date(latest.timestamp).toLocaleDateString()})`)}`);
       if (latest.blockers && latest.blockers.length > 0) {
-        console.log(chalk.red(`  ⚠ ${latest.blockers.length} unresolved conflicts from debate`));
+        const high = latest.blockers.filter((b) => b.severity === "high").length;
+        console.log(`${INDENT}${chalk.red(`⚠ ${latest.blockers.length} unresolved conflicts${high > 0 ? ` (${high} high)` : ""}`)}`);
       }
     }
 
-    console.log(hint('Commands: ask, plan, debate, index, sessions'));
+    if (discussions.length > 0) {
+      const latest = discussions[0]!;
+      console.log(`${INDENT}${chalk.dim("Latest discussion:")} "${latest.feature}" — ${latest.conflicts.length} conflicts ${chalk.dim(`(${new Date(latest.timestamp).toLocaleDateString()})`)}`);
+    }
+
+    console.log(hint('Commands: ask, plan, discuss, index, sessions'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`\nError: ${msg}`));

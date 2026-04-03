@@ -1,8 +1,11 @@
 import chalk from "chalk";
+import stripAnsi from "strip-ansi";
 const MAX_WIDTH = 80;
 /**
  * Format a completed markdown string for terminal display.
- * Handles headings, bullets, code blocks, bold, inline code, and repo citations.
+ * Handles headings (h1-h6), bullets, numbered lists, code blocks,
+ * blockquotes, horizontal rules, links, bold, italic, inline code,
+ * and repo citations.
  */
 export function formatMarkdown(text) {
     const lines = text.split("\n");
@@ -25,30 +28,64 @@ export function formatMarkdown(text) {
             continue;
         }
         const trimmed = line.trimStart();
-        // Headings
-        if (trimmed.startsWith("### ")) {
-            out.push("");
-            out.push(chalk.bold(`  ${trimmed.slice(4)}`));
+        const indent = line.length - trimmed.length;
+        // Horizontal rules
+        if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(trimmed)) {
+            out.push(chalk.dim("  " + "─".repeat(60)));
             continue;
         }
-        if (trimmed.startsWith("## ")) {
+        // Headings (h1-h6)
+        const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)/);
+        if (headingMatch) {
+            const level = headingMatch[1].length;
+            const content = headingMatch[2];
             out.push("");
-            out.push(chalk.bold.cyan(`  ${trimmed.slice(3)}`));
+            if (level <= 2) {
+                out.push(chalk.bold.cyan(`  ${content}`));
+            }
+            else if (level === 3) {
+                out.push(chalk.bold(`  ${content}`));
+            }
+            else {
+                // h4-h6: bold with increasing indent
+                const extra = "  ".repeat(level - 3);
+                out.push(chalk.bold(`  ${extra}${content}`));
+            }
             continue;
         }
-        if (trimmed.startsWith("# ")) {
-            out.push("");
-            out.push(chalk.bold.cyan(`  ${trimmed.slice(2)}`));
-            continue;
-        }
-        // Bullet points
-        if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        // Blockquotes
+        if (trimmed.startsWith("> ")) {
             const content = formatInline(trimmed.slice(2));
             const wrapped = wordWrap(content, MAX_WIDTH - 6);
+            for (const wl of wrapped.split("\n")) {
+                out.push(`  ${chalk.dim("│")} ${wl}`);
+            }
+            continue;
+        }
+        if (trimmed === ">") {
+            out.push(`  ${chalk.dim("│")}`);
+            continue;
+        }
+        // Markdown table rows
+        if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+            // Skip separator rows (|---|---|)
+            if (/^\|[\s\-:|]+\|$/.test(trimmed))
+                continue;
+            const cells = trimmed.slice(1, -1).split("|").map((c) => c.trim());
+            const formatted = cells.map((c) => formatInline(c)).join(chalk.dim("  │  "));
+            out.push(`  ${formatted}`);
+            continue;
+        }
+        // Bullet points (with nesting support)
+        if (/^[-*]\s+/.test(trimmed)) {
+            const nestLevel = Math.floor(indent / 2);
+            const nestIndent = "  ".repeat(nestLevel);
+            const content = formatInline(trimmed.replace(/^[-*]\s+/, ""));
+            const wrapped = wordWrap(content, MAX_WIDTH - 6 - nestLevel * 2);
             const wrappedLines = wrapped.split("\n");
-            out.push(`  ${chalk.dim("•")} ${wrappedLines[0]}`);
+            out.push(`  ${nestIndent}${chalk.dim("•")} ${wrappedLines[0]}`);
             for (let i = 1; i < wrappedLines.length; i++) {
-                out.push(`    ${wrappedLines[i]}`);
+                out.push(`  ${nestIndent}  ${wrappedLines[i]}`);
             }
             continue;
         }
@@ -81,6 +118,8 @@ export function formatMarkdown(text) {
 function formatInline(text) {
     // Repo citations [repo:file]
     text = text.replace(/\[([^\]]+?):([^\]]+?)\]/g, (_, repo, file) => chalk.cyan(`[${repo}`) + chalk.dim(`:${file}`) + chalk.cyan(`]`));
+    // Links [text](url)
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => chalk.bold(label) + chalk.dim(` (${url})`));
     // Bold **text**
     text = text.replace(/\*\*([^*]+)\*\*/g, (_, t) => chalk.bold(t));
     // Inline code `text`
@@ -90,11 +129,8 @@ function formatInline(text) {
     return text;
 }
 function wordWrap(text, maxWidth) {
-    // Strip ANSI for width calculation
-    const stripAnsi = (s) => s.replace(/\u001b\[[0-9;]*m/g, "");
     if (stripAnsi(text).length <= maxWidth)
         return text;
-    // Simple word wrap that preserves ANSI codes
     const words = text.split(" ");
     const lines = [];
     let current = "";
